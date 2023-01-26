@@ -4,11 +4,12 @@ If using for training: modify lines 10 and 11 for appropriate wandb.
 import torch
 
 run_name = "PirouNet_dance"
-load_from_checkpoint = "checkpoint_pirounet_dance"
+load_from_checkpoint = None
 
 # # Wandb
-# project = "your_wandb_project"
-# entity = "your_wandb_username"
+project = "pirounet"
+entity = "meredityman"
+
 
 # Hardware
 which_device = "0"
