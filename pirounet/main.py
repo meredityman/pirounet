@@ -1,119 +1,83 @@
 """Main file performing training with labels (semi-supervised)."""
 
-import logging
-
-logging.basicConfig(level=logging.INFO)
-
 import os
 import warnings
+import logging
+import argparse
+import wandb
+
+import torch
 
 import datasets
 import default_config
 import evaluate.generate_f as generate_f
 import models.dgm_lstm_vae as dgm_lstm_vae
-import torch
 import train
-
-import wandb
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = default_config.which_device
 
-logging.info(f"Using PyTorch version: {torch. __version__}")
+parser = argparse.ArgumentParser()
+# parser.add_argument('-d',  '--data',    default='data')
+parser.add_argument('-ld', '--loaddir', default='models')
+parser.add_argument('-td', '--traindir', default='train')
+parser.add_argument('-lr', '--loadraw', default='data/mariel_*.npy')
+parser.add_argument('-ls', '--labelpath', default='data/labels_from_app.csv')
+a = parser.parse_args()
 
+logging.info(f"Using PyTorch version: {torch. __version__}")
+logging.basicConfig(level=logging.INFO)
 warnings.filterwarnings("ignore")
 
-wandb.init(
-    project=default_config.project,
-    entity=default_config.entity,
-    config={
-        "run_name": default_config.run_name,
-        "load_from_checkpoint": default_config.load_from_checkpoint,
-        "epochs": default_config.epochs,
-        "learning_rate": default_config.learning_rate,
-        "batch_size": default_config.batch_size,
-        "seq_len": default_config.seq_len,
-        "with_clip": default_config.with_clip,
-        "input_dim": default_config.input_dim,
-        "kl_weight": default_config.kl_weight,
-        "neg_slope": default_config.neg_slope,
-        "n_layers": default_config.n_layers,
-        "h_dim": default_config.h_dim,
-        "latent_dim": default_config.latent_dim,
-        "neg_slope_classif": default_config.neg_slope_classif,
-        "n_layers_classif": default_config.n_layers_classif,
-        "h_dim_classif": default_config.h_dim_classif,
-        "label_dim": default_config.label_dim,
-        "device": default_config.device,
-        "effort": default_config.effort,
-        "fraction_label": default_config.fraction_label,
-        "train_ratio": default_config.train_ratio,
-        "train_lab_frac": default_config.train_lab_frac,
-        "shuffle_data": default_config.shuffle_data,
-    },
-)
+def main():
+    config = {}
+    for name in dir(default_config):
+        if not (name.startswith('__') or name.endswith('__') or name=='torch'):
+            config[name] = getattr(default_config, name)
 
-config = wandb.config
-# wandb.run.name = default_config.run_name
+    a.traindir = os.path.join(a.traindir, config['run_name'])
+    os.makedirs(a.traindir, exist_ok=True)
 
-logging.info(f"Config: {config}")
-logging.info(f"---> Using device {config.device}")
-logging.info("Initialize model")
+    for k in vars(a):
+        config[k] = vars(a)[k]
 
-model = dgm_lstm_vae.DeepGenerativeModel(
-    n_layers=config.n_layers,
-    input_dim=config.input_dim,
-    h_dim=config.h_dim,
-    latent_dim=config.latent_dim,
-    output_dim=config.input_dim,
-    seq_len=config.seq_len,
-    neg_slope=config.neg_slope,
-    label_dim=config.label_dim,
-    batch_size=config.batch_size,
-    h_dim_classif=config.h_dim_classif,
-    neg_slope_classif=config.neg_slope_classif,
-    n_layers_classif=config.n_layers_classif,
-).to(config.device)
+    wandb.init(project=default_config.project, entity=default_config.entity, config=config, dir=a.traindir)
+    config = wandb.config
+    # wandb.run.name = default_config.run_name
 
-logging.info("Get data")
-if config.train_ratio and config.train_lab_frac is not None:
-    (
-        labelled_data_train,
-        labels_train_true,
-        unlabelled_data_train,
-        labelled_data_valid,
-        labels_valid,
-        labelled_data_test,
-        labels_test,
-        unlabelled_data_test,
-    ) = datasets.get_model_data(config)
-if config.fraction_label is not None:
-    (
-        labelled_data_train,
-        labels_train,
-        unlabelled_data_train,
-        labelled_data_valid,
-        labels_valid,
-        labelled_data_test,
-        labels_test,
-        unlabelled_data_test,
-    ) = datasets.get_model_specific_data(config)
+    logging.info(f"Config: {config}")
+    logging.info(f"---> Using device {config.device}")
+    logging.info("Initialize model")
 
+    model = dgm_lstm_vae.DeepGenerativeModel(
+        n_layers = config.n_layers,
+        input_dim = config.input_dim,
+        h_dim = config.h_dim,
+        latent_dim = config.latent_dim,
+        output_dim = config.input_dim,
+        seq_len = config.seq_len,
+        neg_slope = config.neg_slope,
+        label_dim = config.label_dim,
+        batch_size = config.batch_size,
+        h_dim_classif = config.h_dim_classif,
+        neg_slope_classif = config.neg_slope_classif,
+        n_layers_classif = config.n_layers_classif,
+    ).to(config.device)
 
-optimizer = torch.optim.Adam(
-    model.parameters(), lr=config.learning_rate, betas=(0.9, 0.999)
-)
+    logging.info("Get data")
+    if config.train_ratio and config.train_lab_frac is not None:
+        labelled_data_train, labels_train, unlabelled_data_train, labelled_data_val, labels_val, _, _, _ = datasets.get_model_data(config)
+        # labelled_data_test, labels_test, unlabelled_data_test = not used
+    if config.fraction_label is not None:
+        labelled_data_train, labels_train, unlabelled_data_train, labelled_data_val, labels_val, _, _, _ = datasets.get_model_specific_data(config)
+        # labelled_data_test, labels_test, unlabelled_data_test = not used
 
-logging.info("Train")
-train.run_train_dgm(
-    model,
-    labelled_data_train,
-    labels_train,
-    unlabelled_data_train,
-    labelled_data_valid,
-    labels_valid,
-    optimizer,
-    config=config,
-)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate, betas=(0.9, 0.999))
 
-wandb.finish()
+    logging.info("Train")
+    train.run_train_dgm(model, labelled_data_train, labels_train, unlabelled_data_train, labelled_data_val, labels_val, optimizer, config=config,
+                        loaddir=a.loaddir, savedir=a.traindir)
+    wandb.finish()
+
+if __name__ == '__main__':
+    main()

@@ -6,9 +6,7 @@ import torch
 
 def reconstruction_loss(x, x_recon):
     """Compute the reconstruction loss between two sequences.
-
-    This is computed as the mean square errors on the joints'
-    positions in 3D.
+    This is computed as the mean square errors on the joints' positions in 3D.
 
     Parameters
     ----------
@@ -23,8 +21,7 @@ def reconstruction_loss(x, x_recon):
     ----------
     recon_loss :    array
                     Shape = [batch_size, 1]
-                    Reconstruction loss for each sequence
-                    in batch.
+                    Reconstruction loss for each sequence in batch.
     """
     assert x.ndim == x_recon.ndim == 3
     batch_size = x.shape[0]
@@ -62,9 +59,8 @@ def kld(q_param):
 def graph_magnitude(x, x_recon):
     """Calculates graph magnitude diff between two batches of sequences.
 
-    Graph magnitude is the sum of all segment magnitudes making up the
-    skeleton. These segments' end points are made up of means between groups
-    of points.
+    Graph magnitude is the sum of all segment magnitudes making up the skeleton. 
+    These segments' end points are made up of means between groups of points.
 
     Parameters
     ----------
@@ -76,40 +72,30 @@ def graph_magnitude(x, x_recon):
                     Shape = [batch, seq_len, input_dim]
                     Reconstructed batch of sequences.
 
-
     Returns
     ----------
     total_graph_loss :  float
-                        Sum of differences in graph magnitude
-                        over all segments in all poses of the
-                        batch.
-
+                        Sum of differences in graph magnitude over all segments in all poses of the batch.
     """
-    print("start graph magnitude")
+    # print("start graph magnitude")
     x = x.reshape(x.shape[0], x.shape[1], -1, 3)
     x_recon = x_recon.reshape(x.shape[0], x.shape[1], -1, 3)
 
-    x_lines = batch_getlines(x).to(
-        config.device
-    )  # shape [batch, seq_len, n_segments, 3, 2]
+    x_lines = batch_getlines(x).to(config.device)  # shape [batch, seq_len, n_segments, 3, 2]
     x_recon_lines = batch_getlines(x_recon).to(config.device)
 
-    x_limb_size = (
-        x_lines[:, :, :, :, 0] - x_lines[:, :, :, :, 1]
-    )  # [batch, seq_len, n_segments, 3]
+    x_limb_size = (x_lines[:, :, :, :, 0] - x_lines[:, :, :, :, 1])  # [batch, seq_len, n_segments, 3]
     x_recon_limb_size = x_recon_lines[:, :, :, :, 0] - x_recon_lines[:, :, :, :, 1]
 
-    print("get magnitudes 1")
-    limb_magni = torch.sum(
-        torch.square(x_limb_size), dim=3
-    )  # [batch, seq_len, n_segments]
+    # print("get magnitudes 1")
+    limb_magni = torch.sum(torch.square(x_limb_size), dim=3)  # [batch, seq_len, n_segments]
     limb_magni = torch.sqrt(limb_magni).to(config.device)
-    print("get magnitudes 2")
+    # print("get magnitudes 2")
     limb_magni_recon = torch.sum(torch.square(x_recon_limb_size), dim=3)
     limb_magni_recon = torch.sqrt(limb_magni_recon).to(config.device)
-    print("subtract")
+    # print("subtract")
     graph_loss = limb_magni - limb_magni_recon
-    print("take sum")
+    # print("take sum")
     total_graph_loss = torch.sum(graph_loss.reshape(-1)).to(config.device)
 
     return total_graph_loss
@@ -133,7 +119,7 @@ def batch_getlines(x):
                     relevant keypoints.
 
     """
-    print("get batch lines")
+    # print("get batch lines")
     skeleton_lines = [
         #     ( (start group), (end group) ),
         (("LHEL",), ("LTOE",)),  # toe to heel
@@ -142,83 +128,14 @@ def batch_getlines(x):
         (("RKNE", "RKNI"), ("RHEL",)),
         (("LKNE", "LKNI"), ("LFWT", "RFWT", "LBWT", "RBWT")),  # knee to "navel"
         (("RKNE", "RKNI"), ("LFWT", "RFWT", "LBWT", "RBWT")),
-        (
-            ("LFWT", "RFWT", "LBWT", "RBWT"),
-            (
-                "STRN",
-                "T10",
-            ),
-        ),  # "navel" to chest
-        (
-            (
-                "STRN",
-                "T10",
-            ),
-            (
-                "CLAV",
-                "C7",
-            ),
-        ),  # chest to neck
-        (
-            (
-                "CLAV",
-                "C7",
-            ),
-            (
-                "LFSH",
-                "LBSH",
-            ),
-        ),  # neck to shoulders
-        (
-            (
-                "CLAV",
-                "C7",
-            ),
-            (
-                "RFSH",
-                "RBSH",
-            ),
-        ),
-        (
-            (
-                "LFSH",
-                "LBSH",
-            ),
-            (
-                "LELB",
-                "LIEL",
-            ),
-        ),  # shoulders to elbows
-        (
-            (
-                "RFSH",
-                "RBSH",
-            ),
-            (
-                "RELB",
-                "RIEL",
-            ),
-        ),
-        (
-            (
-                "LELB",
-                "LIEL",
-            ),
-            (
-                "LOWR",
-                "LIWR",
-            ),
-        ),  # elbows to wrist
-        (
-            (
-                "RELB",
-                "RIEL",
-            ),
-            (
-                "ROWR",
-                "RIWR",
-            ),
-        ),
+        (("LFWT", "RFWT", "LBWT", "RBWT"), ("STRN", "T10")),  # "navel" to chest
+        (("STRN", "T10"), ("CLAV", "C7")),  # chest to neck
+        (("CLAV", "C7"), ("LFSH", "LBSH")),  # neck to shoulders
+        (("CLAV", "C7"), ("RFSH", "RBSH")),
+        (("LFSH", "LBSH"), ("LELB", "LIEL")),  # shoulders to elbows
+        (("RFSH", "RBSH"), ("RELB", "RIEL")),
+        (("LELB", "LIEL"), ("LOWR", "LIWR")),  # elbows to wrist
+        (("RELB", "RIEL"), ("ROWR", "RIWR")),
         (("LFHD",), ("LBHD",)),
         (("LBHD",), ("RBHD",)),
         (("RBHD",), ("RFHD",)),
@@ -297,7 +214,7 @@ def batch_getlines(x):
     batch_x_lines = torch.zeros((1, seq_len, len(skeleton_idxs), 3, 2)).to(
         config.device
     )
-    print("batch loop")
+    # print("batch loop")
     for i in range(batch_size):
         xline = torch.zeros((x[i].shape[0], len(skeleton_idxs), 3, 2)).to(config.device)
         for i, (g1, g2) in enumerate(skeleton_idxs):

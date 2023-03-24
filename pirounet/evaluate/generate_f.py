@@ -1,22 +1,27 @@
 "Functions for generating and visualizing dance sequences."
 
-import logging
 import os
 import random
-
-import default_config
+import logging
+import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import models.utils as utils
-import mpl_toolkits.mplot3d.axes3d as p3
-import numpy as np
-import torch
 from matplotlib import animation
+import mpl_toolkits.mplot3d.axes3d as p3
 from mpl_toolkits.mplot3d.art3d import juggle_axes
 from sklearn.decomposition import PCA
-from torch.autograd import Variable
+
+# !!!
+mpl_log = logging.getLogger('matplotlib')
+mpl_log.setLevel(logging.WARNING)
 
 import wandb
+
+import torch
+from torch.autograd import Variable
+
+import default_config
+import models.utils as utils
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = default_config.which_device
@@ -91,83 +96,14 @@ skeleton_lines = [
     (("RKNE", "RKNI"), ("RHEL",)),
     (("LKNE", "LKNI"), ("LFWT", "RFWT", "LBWT", "RBWT")),  # knee to "navel"
     (("RKNE", "RKNI"), ("LFWT", "RFWT", "LBWT", "RBWT")),
-    (
-        ("LFWT", "RFWT", "LBWT", "RBWT"),
-        (
-            "STRN",
-            "T10",
-        ),
-    ),  # "navel" to chest
-    (
-        (
-            "STRN",
-            "T10",
-        ),
-        (
-            "CLAV",
-            "C7",
-        ),
-    ),  # chest to neck
-    (
-        (
-            "CLAV",
-            "C7",
-        ),
-        (
-            "LFSH",
-            "LBSH",
-        ),
-    ),  # neck to shoulders
-    (
-        (
-            "CLAV",
-            "C7",
-        ),
-        (
-            "RFSH",
-            "RBSH",
-        ),
-    ),
-    (
-        (
-            "LFSH",
-            "LBSH",
-        ),
-        (
-            "LELB",
-            "LIEL",
-        ),
-    ),  # shoulders to elbows
-    (
-        (
-            "RFSH",
-            "RBSH",
-        ),
-        (
-            "RELB",
-            "RIEL",
-        ),
-    ),
-    (
-        (
-            "LELB",
-            "LIEL",
-        ),
-        (
-            "LOWR",
-            "LIWR",
-        ),
-    ),  # elbows to wrist
-    (
-        (
-            "RELB",
-            "RIEL",
-        ),
-        (
-            "ROWR",
-            "RIWR",
-        ),
-    ),
+    (("LFWT", "RFWT", "LBWT", "RBWT"), ("STRN", "T10")),  # "navel" to chest
+    (("STRN", "T10"), ("CLAV", "C7")),  # chest to neck
+    (("CLAV", "C7"), ("LFSH", "LBSH")),  # neck to shoulders
+    (("CLAV", "C7"), ("RFSH", "RBSH")),
+    (("LFSH", "LBSH"), ("LELB", "LIEL")),  # shoulders to elbows
+    (("RFSH", "RBSH"), ("RELB", "RIEL")),
+    (("LELB", "LIEL"), ("LOWR", "LIWR")),  # elbows to wrist
+    (("RELB", "RIEL"), ("ROWR", "RIWR")),
     (("LFHD",), ("LBHD",)),  # draw lines around circumference of the head
     (("LBHD",), ("RBHD",)),
     (("RBHD",), ("RFHD",)),
@@ -186,12 +122,9 @@ for g1, g2 in skeleton_lines:
     entry.append([point_labels.index(line) for line in g2])
     skeleton_idxs.append(entry)
 
-
 def getlinesegments(seq, zcolor=None, cmap=None):
     """Calculates coordinates for the lines.
-
-    If using a colormap, calculates the color based on the location
-    of each segment's middle point.
+    If using a colormap, calculates the color based on the location of each segment's middle point.
 
     Parameters
     ----------
@@ -231,7 +164,6 @@ def getlinesegments(seq, zcolor=None, cmap=None):
     else:
         return xline
 
-
 def putlines(ax, segments, color=None, lw=2.5, alpha=None):
     """Puts line segments on the given axis with given colors.
 
@@ -268,33 +200,14 @@ def putlines(ax, segments, color=None, lw=2.5, alpha=None):
             np.linspace(segments[i, 0, 0], segments[i, 0, 1], 2),
             np.linspace(segments[i, 1, 0], segments[i, 1, 1], 2),
             np.linspace(segments[i, 2, 0], segments[i, 2, 1], 2),
-            color=c,
-            alpha=alpha,
-            lw=lw,
-        )[0]
+            color=c, alpha=alpha, lw=lw)[0]
         lines.append(line)
     return lines
 
-
-def animatestick(
-    seq,
-    fname,
-    ghost=None,
-    ghost_shift=1,
-    figsize=(12, 8),
-    zcolor=None,
-    ax_lims=(-0.4, 0.4),
-    speed=45,
-    dot_size=20,
-    dot_alpha=0.5,
-    lw=2.5,
-    cmap="inferno",
-    condition=None,
-):
+def animatestick(seq, fname, ghost=None, ghost_shift=1, figsize=(12, 8), zcolor=None, ax_lims=(-0.4, 0.4), 
+                 speed=45, dot_size=20, dot_alpha=0.5, lw=2.5, cmap="inferno", condition=None):
     """Creates skeleton animation of one sequence.
-
-    Draws up to two connected skeletons moving in
-    a unit box, centered at a point on the x,y plane.
+    Draws up to two connected skeletons moving in a unit box, centered at a point on the x,y plane.
 
     Parameters
     ----------
@@ -332,15 +245,15 @@ def animatestick(
                     Integer representing categorical label associated
                     to dance sequence, if known.
 
-
     Returns
     ----------
     fname :         string
                     Filepath + name of animation for saving purposes.
     """
+
     # Put data on CPU and convert to numpy array
     if torch.is_tensor(seq):
-        seq = seq.cpu().data.numpy()
+        seq = seq.cpu().data.numpy() # [40,53,3]
     if ghost is not None:
         ghost = ghost.cpu().data.numpy()
 
@@ -364,27 +277,12 @@ def animatestick(
 
     cm = matplotlib.cm.get_cmap(cmap)
 
-    pts = ax.scatter(
-        seq[0, :, 0],
-        seq[0, :, 1],
-        seq[0, :, 2],
-        c=zcolor,
-        s=dot_size,
-        cmap=cm,
-        alpha=dot_alpha,
-    )
+    pts = ax.scatter(seq[0,:,0], seq[0,:,1], seq[0,:,2], c=zcolor, s=dot_size, cmap=cm, alpha=dot_alpha)
 
     ghost_color = "blue"
 
     if ghost is not None:
-        pts_g = ax.scatter(
-            ghost[0, :, 0],
-            ghost[0, :, 1],
-            ghost[0, :, 2],
-            c=ghost_color,
-            s=dot_size,
-            alpha=dot_alpha,
-        )
+        pts_g = ax.scatter(ghost[0,:,0], ghost[0,:,1], ghost[0,:,2], c=ghost_color, s=dot_size, alpha=dot_alpha)
 
     if ax_lims:
         ax.set_xlim(*ax_lims)
@@ -392,8 +290,8 @@ def animatestick(
         ax.set_zlim(0, ax_lims[1] - ax_lims[0])
     plt.close(fig)
 
-    xline, colors = getlinesegments(seq, zcolor, cm)
-    lines = putlines(ax, xline[0], colors, lw=lw, alpha=0.9)
+    xline, colors = getlinesegments(seq, zcolor, cm) # [40,22,3,2] .. [-0.21, 0.6]
+    lines = putlines(ax, xline[0], colors, lw=lw, alpha=0.9) # 22 Line2D(_child1)
 
     if ghost is not None:
         xline_g = getlinesegments(ghost)
@@ -411,32 +309,20 @@ def animatestick(
             l.set_3d_properties(xline[t, i, 2])
 
         if ghost is not None:
-            pts_g._offsets3d = juggle_axes(
-                ghost[t, :, 0], ghost[t, :, 1], ghost[t, :, 2], "z"
-            )
+            pts_g._offsets3d = juggle_axes(ghost[t, :, 0], ghost[t, :, 1], ghost[t, :, 2], "z")
             for i, l in enumerate(lines_g):
                 l.set_data(xline_g[t, i, :2])
                 l.set_3d_properties(xline_g[t, i, 2])
+# !!!
+        return l,
 
-    anim = animation.FuncAnimation(
-        fig, update, len(seq), interval=speed, blit=False, save_count=200
-    )
-    anim.save(fname, writer="pillow", fps=30)
-    logging.info(f"Artifact saved at {fname}.")
+    anim = animation.FuncAnimation(fig, update, len(seq), interval=speed, blit=False, save_count=200)
+    _ = anim.save(fname, writer="pillow", fps=30)
+    # logging.info(f"Artifact saved at {fname}.")
     return fname
 
 
-def reconstruct(
-    model,
-    config,
-    epoch,
-    input_data,
-    input_label,
-    purpose,
-    log_to_wandb=False,
-    results_path=None,
-    comic=False,
-):
+def reconstruct(model, config, epoch, input_data, input_label, purpose, log_to_wandb=False, results_path=None, comic=False):
     """
     Make and save stick gif on sequence from input_data dataset.
     No conditions on output.
@@ -488,22 +374,14 @@ def reconstruct(
 
         if results_path is None:
             name = f"recon_{i_batch}_{purpose}_epoch_{epoch}_{config.run_name}.gif"
-            filepath = os.path.join(
-                os.path.abspath(os.getcwd()), "animations/" + config.run_name
-            )
+            filepath = os.path.join(os.path.abspath(os.getcwd()), "animations/" + config.run_name)
             fname = os.path.join(filepath, name)
 
         if results_path is not None:
             name = f"recon_{i_batch}_{purpose}_epoch_{epoch}_{config.run_name}.gif"
             fname = os.path.join(str(results_path), name)
 
-        fname = animatestick(
-            x_recon_formatted,
-            fname=fname,
-            ghost=x_formatted,
-            dot_alpha=0.7,
-            ghost_shift=0.2,
-        )
+        fname = animatestick(x_recon_formatted, fname=fname, ghost=x_formatted, dot_alpha=0.7, ghost_shift=0.2)
 
     if comic:
         plotname = f"comic_{purpose}"
@@ -511,29 +389,20 @@ def reconstruct(
         comicname = os.path.join(str(results_path), plotname + ".png")
 
         draw_comic(x_recon_formatted, comicname_recon, recon=True)
-        draw_comic(
-            x_formatted,
-            comicname,
-        )
+        draw_comic(x_formatted, comicname)
 
     if log_to_wandb:
         animation_artifact = wandb.Artifact("animation", type="video")
         animation_artifact.add_file(fname)
         wandb.log_artifact(animation_artifact)
-        logging.info("ARTIFACT: logged reconstruction to wandb.")
+        # logging.info("ARTIFACT: logged reconstruction to wandb.")
 
 
-def generate_rand(
-    model,
-    config,
-    n_seq,
-    y_given=None,
-):
+def generate_rand(model, config, n_seq, y_given=None):
     """Generate a dance by sampling in the latent space.
 
     If no label y is given, then a random label is chosen.
-    Choice of "label" does not actually condition the output
-    for an entangled latent space.
+    Choice of "label" does not actually condition the output for an entangled latent space.
 
     Parameters
     ----------
@@ -581,11 +450,8 @@ def generate_rand(
     return x_create
 
 
-def generate_cond(
-    model, config, num_gen_cond_lab, encoded_data, encoded_labels, shuffle=False
-):
-    """Generates new sequences by sampling from high-density Efforts
-    in latent space.
+def generate_cond(model, config, num_gen_cond_lab, encoded_data, encoded_labels, shuffle=False):
+    """Generates new sequences by sampling from high-density Efforts in latent space.
 
     While the latent space is entangled, we structure the generation
     to be sampled from a set of latent variables that were constructed
@@ -621,9 +487,12 @@ def generate_cond(
                         Shape = [label_dim * num_gen_cond_lab, ]
     """
 
-    all_high, pca, z_center = get_high_neighb(
-        model, config, encoded_data, encoded_labels
-    )
+    all_high, pca, z_center = get_high_neighb(model, config, encoded_data, encoded_labels)
+
+# !!!
+    if any([len(h) < 1 for h in all_high]): # zero will break this
+        return None, str([len(h) for h in all_high])
+    # print(' all_high', [len(h) for h in all_high]) # ~ [155, 144, 268] by tuple 2
 
     gen_dance = []
     for y in range(config.label_dim):
@@ -639,15 +508,12 @@ def generate_cond(
 
             z_within_tile = torch.tensor(z).reshape(1, -1).to(config.device).float()
 
-            x_create = model.sample(
-                z_within_tile,
-                utils.one_hot(y, config.label_dim).reshape((1, 3)).to(config.device),
-            )
+# !!! labels
+            x_create = model.sample(z_within_tile, utils.one_hot(y, config.label_dim).reshape((1, 3)).to(config.device))
+            # x_create = model.sample(z_within_tile, utils.one_hot(y, config.label_dim).reshape((1, 3)).to(config.device))
             x_create_formatted = x_create.reshape((config.seq_len, -1, 3))
 
-            one_label_seq = np.append(
-                one_label_seq, x_create_formatted.cpu().data.numpy()
-            )
+            one_label_seq = np.append(one_label_seq, x_create_formatted.cpu().data.numpy())
 
         gen_dance = np.append(gen_dance, one_label_seq)
 
@@ -668,20 +534,8 @@ def generate_cond(
     return gen_dance, gen_labels
 
 
-def generate_and_save(
-    model,
-    config,
-    epoch,
-    num_artifacts,
-    type,
-    encoded_data=None,
-    encoded_labels=None,
-    y_given=None,
-    log_to_wandb=False,
-    results_path=None,
-    comic=False,
-    npy_output=False,
-):
+def generate_and_save(model, config, epoch, num_artifacts, type,
+                      encoded_data=None, encoded_labels=None, y_given=None, log_to_wandb=False, results_path=None, comic=False, npy_output=False):
     """Generates a dance by randomly sampling the latent space and save
      the corresponding artifact. Choice of "label" does not actually
      condition the output for an entangled latent space.
@@ -735,45 +589,31 @@ def generate_and_save(
         if type == "random":
             x_create = generate_rand(model, config, num_artifacts)
         if type == "cond":
-            x_create, _ = generate_cond(
-                model,
-                config,
-                num_artifacts,
-                encoded_data,
-                encoded_labels,
-                shuffle=False,
-            )
+            x_create, tmp = generate_cond(model, config, num_artifacts, encoded_data, encoded_labels, shuffle=False)
+# !!!
+            if x_create is None:
+                return tmp
 
-    x_create_formatted = x_create.reshape((-1, config.seq_len, 53, 3))
+    x_create_formatted = x_create.reshape((-1, config.seq_len, 53, 3)) # [2,40,53,3] .. [-0.21, 0.6]
 
     for i in range(len(x_create_formatted)):
-        if results_path is None:
-            name = f"create_{i}_epoch_{epoch}_{config.run_name}.gif"
-            filepath = os.path.join(
-                os.path.abspath(os.getcwd()), "animations/" + config.run_name
-            )
-            fname = os.path.join(filepath, name)
-            npyname = os.path.join(
-                filepath, f"data_{i}_epoch_{epoch}_{config.run_name}.npy"
-            )
+        fname     = os.path.join(str(results_path),  "anim-%s-ep%03d-%d.gif" % (config.run_name, epoch, i))
+        comicname = os.path.join(str(results_path), "comic-%s-ep%03d-%d.jpg" % (config.run_name, epoch, i))
+        npyname   = os.path.join(str(results_path),  "data-%s-ep%03d-%d.npy" % (config.run_name, epoch, i))
 
-        if results_path is not None:
-            name = f"create_{i}_epoch_{epoch}_{config.run_name}.gif"
-            fname = os.path.join(str(results_path), name)
-            plotname = f"comic_{i}_{epoch}_{config.run_name}.png"
-            comicname = os.path.join(str(results_path), plotname)
-            npyname = os.path.join(
-                str(results_path), f"data_{i}_epoch_{epoch}_{config.run_name}.npy"
-            )
+        # if results_path is None:
+            # name = f"create_{i}_epoch_{epoch}_{config.run_name}.gif"
+            # filepath = os.path.join(os.path.abspath(os.getcwd()), "animations/" + config.run_name)
+            # fname = os.path.join(filepath, name)
+            # npyname = os.path.join(filepath, f"data_{i}_epoch_{epoch}_{config.run_name}.npy")
+        # if results_path is not None:
+            # name = f"create_{i}_epoch_{epoch}_{config.run_name}.gif"
+            # fname = os.path.join(str(results_path), name)
+            # plotname = f"comic_{i}_{epoch}_{config.run_name}.jpg"
+            # comicname = os.path.join(str(results_path), plotname)
+            # npyname = os.path.join(str(results_path), f"data_{i}_epoch_{epoch}_{config.run_name}.npy")
 
-        fname = animatestick(
-            x_create_formatted[i],
-            fname=fname,
-            ghost=None,
-            dot_alpha=0.7,
-            ghost_shift=0.2,
-            condition=y_given,
-        )
+        fname = animatestick(x_create_formatted[i], fname=fname, ghost=None, dot_alpha=0.7, ghost_shift=0.2, condition=y_given)
 
         if comic:
             draw_comic(x_create_formatted[i], comicname, recon=True)
@@ -785,12 +625,10 @@ def generate_and_save(
             animation_artifact = wandb.Artifact("animation", type="video")
             animation_artifact.add_file(fname)
             wandb.log_artifact(animation_artifact)
-            logging.info("ARTIFACT: logged random generation to wandb.")
+            # logging.info("ARTIFACT: logged random generation to wandb.")
 
 
-def draw_comic(
-    frames, comicname, figsize=None, window_size=0.8, dot_size=0, lw=0.8, recon=False
-):
+def draw_comic(frames, comicname, figsize=None, window_size=0.8, dot_size=0, lw=0.8, recon=False):
     """Generates a strip comic style plot of a dance sequence.
 
     Extracted poses are plotted in consecutive order along a
@@ -844,15 +682,7 @@ def draw_comic(
     n_frame = 0
     for iframe, frame in enumerate(frames):
         n_frame += 1
-        ax.scatter(
-            frame[:, 0],
-            frame[:, 1] + 0.4 + n_frame * shift_size,
-            frame[:, 2],
-            c=frame[:, 2],
-            cmap=cm,
-            s=dot_size,
-            depthshade=True,
-        )
+        ax.scatter(frame[:,0], frame[:,1] + 0.4 + n_frame * shift_size, frame[:,2], c=frame[:,2], cmap=cm, s=dot_size, depthshade=True)
 
         zcolor = frame[:, 2] * 1
 
@@ -868,13 +698,7 @@ def draw_comic(
             x1 = np.mean(frame[g1_idx], axis=0)
             x2 = np.mean(frame[g2_idx], axis=0)
 
-            ax.plot(
-                np.linspace(x1[0], x2[0], 10),
-                np.linspace(x1[1], x2[1], 10) + iframe * shift_size,
-                np.linspace(x1[2], x2[2], 10),
-                color=color,
-                lw=lw,
-            )
+            ax.plot(np.linspace(x1[0], x2[0], 10), np.linspace(x1[1], x2[1], 10) + iframe * shift_size, np.linspace(x1[2], x2[2], 10), color=color, lw=lw)
         plt.savefig(comicname, dpi=500)
 
 
@@ -919,17 +743,13 @@ def get_high_neighb(model, config, labelled_data, labels):
         batch += 1
 
         x_batch, y_batch = Variable(x_batch), Variable(y_batch)
-        x_batch, y_batch = x_batch.to(default_config.device), y_batch.to(
-            default_config.device
-        )
+        x_batch, y_batch = x_batch.to(default_config.device), y_batch.to(default_config.device)
 
         y_labels = torch.squeeze(y_batch)
         for i in range(len(y_labels)):
             y_label = y_labels[i].item()
             one_hot = utils.one_hot(y_label, default_config.label_dim)
-            y = one_hot.to(default_config.device).reshape(
-                (1, 1, default_config.label_dim)
-            )
+            y = one_hot.to(default_config.device).reshape((1, 1, default_config.label_dim))
             x = x_batch[i].reshape((1, config.seq_len, -1))
 
             z, _, _ = model.encode(x, y)
@@ -977,7 +797,7 @@ def get_high_neighb(model, config, labelled_data, labels):
     n_xs = len(grid_xs[0])
     n_ys = len(grid_ys[0])
 
-    count = np.zeros((default_config.label_dim, n_xs, n_ys))
+    count = np.zeros((default_config.label_dim, n_xs, n_ys)) # [3,160,160]
 
     for y in range(default_config.label_dim):
         for i, y_coord in enumerate(grid_ys[y]):
@@ -992,14 +812,11 @@ def get_high_neighb(model, config, labelled_data, labels):
 
     # create array of high density tiles that we can sample from later
     all_high = []
-    for y in range(default_config.label_dim):
+    for y in range(default_config.label_dim): # 3
         high = []
         for i, y_coord in enumerate(grid_ys[y]):
             for j, x_coord in enumerate(grid_xs[y]):
-                if (
-                    density[y][i, j] > config.density_thresh[y]
-                    and count[y, i, j] > config.dances_per_tile[y]
-                ):
+                if density[y][i, j] > config.density_thresh[y] and count[y, i, j] > config.dances_per_tile[y]:
                     high.append((x_coord, y_coord))
         all_high.append(high)
 
@@ -1048,25 +865,8 @@ def plot_latentspace(model, config, encoded_labeled_data, encoded_labels, path):
     fig = plt.figure()
     axs = fig.add_subplot(projection="3d")
 
-    sc = axs.scatter(
-        z_transformed[:, 0],
-        z_transformed[:, 1],
-        z_transformed[:, 2],
-        c=np.squeeze(encoded_labels.dataset),
-        alpha=0.4,
-        s=0.5,
-    )
-    lp = lambda i: plt.plot(
-        [],
-        [],
-        [],
-        color=sc.cmap(sc.norm(i)),
-        ms=np.sqrt(5),
-        mec="none",
-        label="Laban Effort {:g}".format(i),
-        ls="",
-        marker="o",
-    )[0]
+    sc = axs.scatter(z_transformed[:,0], z_transformed[:,1], z_transformed[:,2], c=np.squeeze(encoded_labels.dataset), alpha=0.4, s=0.5)
+    lp = lambda i: plt.plot([], [], [], color=sc.cmap(sc.norm(i)), ms=np.sqrt(5), mec="none", label="Laban Effort {:g}".format(i), ls="", marker="o")[0]
     handles = [lp(i) for i in np.unique(np.squeeze(encoded_labels.dataset))]
 
     plt.legend(handles=handles)
@@ -1119,6 +919,7 @@ def plot_dist_one_move(model, config, path, n_one_moves):
 
     fig, ax = plt.subplots()
     x = np.arange(0, n_one_moves, 1)
+# !!!
     print(np.array(x).shape)
     print(np.array(all_dist_01).shape)
     ax.plot(x, all_dist_01, c="blue", label="Dist Low-Med")
@@ -1129,11 +930,7 @@ def plot_dist_one_move(model, config, path, n_one_moves):
     plt.savefig(path + f"/histogram_{config.load_from_checkpoint}.png")
 
 
-def generate_and_save_one_move(
-    model,
-    config,
-    path,
-):
+def generate_and_save_one_move(model, config, path):
     """Tests latent space entanglement.
 
     Generates label_dim dance animations using the
@@ -1159,20 +956,10 @@ def generate_and_save_one_move(
         name = f"one_move_{y}.gif"
         fname = os.path.join(path, name)
 
-        fname = animatestick(
-            x_create_formatted,
-            fname=fname,
-            ghost=None,
-            dot_alpha=0.7,
-            ghost_shift=0.2,
-            condition=y,
-        )
+        fname = animatestick(x_create_formatted, fname=fname, ghost=None, dot_alpha=0.7, ghost_shift=0.2, condition=y)
 
 
-def generate_one_move(
-    model,
-    config,
-):
+def generate_one_move(model, config):
     """Repeat one mvoe for different labels.
 
     Generate a sequence from the same body-motion latent variable

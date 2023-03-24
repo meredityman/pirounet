@@ -75,7 +75,7 @@ def plot_classification_accuracy(model, config, labelled_data, labels, purpose, 
     plt.title("PirouNet's confusion matrix \n On " + purpose + " dataset")
     plt.ylabel("Ground truth")
     plt.xlabel("PirouNet predicts")
-    plt.savefig(fname=path + f"/confusion_acc_{purpose}.png", dpi=1200)
+    plt.savefig(fname=path + f"/confusion_acc_{purpose}.jpg", dpi=150)
 
 
 def plot_recognition_accuracy(human_labels, pirounet_labels, path):
@@ -148,4 +148,4 @@ def plot_recognition_accuracy(human_labels, pirounet_labels, path):
     plt.xlabel("Labeler blindly predicts")
     plt.ylabel("Neighborhood sampled from")
     plt.title("Labeler versus PirouNet confusion matrix")
-    plt.savefig(fname=path + "/recognition_accuracy.png", dpi=1200)
+    plt.savefig(fname=path + "/recognition_accuracy.jpg", dpi=150)
